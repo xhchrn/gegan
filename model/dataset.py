@@ -13,13 +13,13 @@ def get_train_dataloader(batch_size):
     images = tf.convert_to_tensor(image_list, dtype=tf.string)
     labels = tf.convert_to_tensor(label_list, dtype=tf.int32)
 
-    input_queue = tf.train.slice_input_producer([images, labels], shuffle=True)
+    input_queue = tf.train.slice_input_producer([images, labels])
     image, label = read_image_label_from_disk(input_queue)
 
     min_after_dequeue = 1000
     capacity = min_after_dequeue + 3 * batch_size
 
-    batch = tf.train.batch([image, label],
+    batch = tf.train.shuffle_batch([image, label],
                             batch_size=batch_size,
                             num_threads=4,
                             capacity=capacity,
