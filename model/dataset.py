@@ -15,7 +15,7 @@ def get_dataloader(batch_size):
 
     input_queue = tf.train.slice_input_producer([images, labels], shuffle=True)
     image, label = read_image_label_from_disk(input_queue)
-    image.shape = (64, 64, 3)
+    image.set_shape([64, 64, 3])
 
     batch = tf.train.batch([image, label], batch_size=batch_size)
     return tf.to_float(batch)
