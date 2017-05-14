@@ -3,28 +3,39 @@ from __future__ import print_function
 from __future__ import absolute_import
 import tensorflow as tf
 import numpy as np
-import random
 import os
+# import random
 # from .utils import pad_seq, bytes_to_file, \
 #     read_split_image, shift_and_resize_image, normalize_image
 
-def get_dataloader(batch_size):
+def get_train_dataloader(batch_size):
     image_list, label_list = get_image_label_list()
     images = tf.convert_to_tensor(image_list, dtype=tf.string)
     labels = tf.convert_to_tensor(label_list, dtype=tf.int32)
 
     input_queue = tf.train.slice_input_producer([images, labels], shuffle=True)
     image, label = read_image_label_from_disk(input_queue)
-    image.set_shape([64, 64, 3])
-    tf.to_float(image)
 
-    batch = tf.train.batch([image, label], batch_size=batch_size)
+    min_after_dequeue = 1000
+    capacity = min_after_dequeue + 3 * batch_size
+
+    batch = tf.train.batch([image, label],
+                            batch_size=batch_size,
+                            num_threads=4,
+                            capacity=capacity,
+                            min_after_dequeue=min_after_dequeue,
+                            name="TrainData")
+
     return batch
 
 def read_image_label_from_disk(input_queue):
     label = input_queue[1]
+
     raw_image = tf.read_file(input_queue[0])
     image = tf.image.decode_jpeg(raw_image, channels=3)
+
+    image.set_shape([64, 64, 3])
+    tf.to_float(image)
 
     return image, label
 

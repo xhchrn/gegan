@@ -9,7 +9,7 @@ import os
 import time
 from collections import namedtuple
 from .ops import conv2d, deconv2d, lrelu, fc, batch_norm, init_embedding, conditional_instance_norm
-from .dataset import TrainDataProvider, InjectDataProvider, NeverEndingLoopingProvider
+from .dataset import get_train_dataloader
 from .utils import scale_back, merge, save_concat_images
 
 # Auxiliary wrapper classes
@@ -25,21 +25,22 @@ class GEGAN(object):
     def __init__(self, experiment_dir=None, experiment_id=0, batch_size=16, input_width=64, output_width=64,
                  generator_dim=128, discriminator_dim=128, L1_penalty=100, Lconst_penalty=15, Ltv_penalty=0.0,
                  Lcategory_penalty=1.0, embedding_num=40, embedding_dim=128, input_filters=3, output_filters=3):
-        self.experiment_dir = experiment_dir
-        self.experiment_id = experiment_id
-        self.batch_size = batch_size
-        self.input_width = input_width
-        self.output_width = output_width
-        self.generator_dim = generator_dim
-        self.discriminator_dim = discriminator_dim
-        self.L1_penalty = L1_penalty
-        self.Lconst_penalty = Lconst_penalty
-        self.Ltv_penalty = Ltv_penalty
-        self.Lcategory_penalty = Lcategory_penalty
-        self.embedding_num = embedding_num
-        self.embedding_dim = embedding_dim
-        self.input_filters = input_filters
-        self.output_filters = output_filters
+        self.experiment_dir     = experiment_dir
+        self.experiment_id      = experiment_id
+        self.batch_size         = batch_size
+        self.input_width        = input_width
+        self.output_width       = output_width
+        self.generator_dim      = generator_dim
+        self.discriminator_dim  = discriminator_dim
+        self.L1_penalty         = L1_penalty
+        self.Lconst_penalty     = Lconst_penalty
+        self.Ltv_penalty        = Ltv_penalty
+        self.Lcategory_penalty  = Lcategory_penalty
+        self.embedding_num      = embedding_num
+        self.embedding_dim      = embedding_dim
+        self.input_filters      = input_filters
+        self.output_filters     = output_filters
+        self.train_dataloader   = get_train_dataloader(self.batch_size)
         # init all the directories
         self.sess = None
         # experiment_dir is needed for training
@@ -516,13 +517,13 @@ class GEGAN(object):
         tf.global_variables_initializer().run()
         real_data       = input_handle.real_data
         embedding_ids   = input_handle.embedding_ids
-        no_target_data  = input_handle.no_target_data
-        no_target_ids   = input_handle.no_target_ids
-
-        # filter by one type of labels
-        data_provider = TrainDataProvider(self.data_dir, filter_by=fine_tune)
-        total_batches = data_provider.compute_total_batch_num(self.batch_size)
-        val_batch_iter = data_provider.get_val_iter(self.batch_size)
+#         no_target_data  = input_handle.no_target_data
+#         no_target_ids   = input_handle.no_target_ids
+# 
+#         # filter by one type of labels
+#         data_provider = TrainDataProvider(self.data_dir, filter_by=fine_tune)
+#         total_batches = data_provider.compute_total_batch_num(self.batch_size)
+#         val_batch_iter = data_provider.get_val_iter(self.batch_size)
 
         saver = tf.train.Saver(max_to_keep=3)
         summary_writer = tf.summary.FileWriter(self.log_dir, self.sess.graph)
