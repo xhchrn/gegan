@@ -5,8 +5,8 @@ import tensorflow as tf
 import numpy as np
 import random
 import os
-from .utils import pad_seq, bytes_to_file, \
-    read_split_image, shift_and_resize_image, normalize_image
+# from .utils import pad_seq, bytes_to_file, \
+#     read_split_image, shift_and_resize_image, normalize_image
 
 def get_dataloader(batch_size):
     image_list, label_list = get_image_label_list()
