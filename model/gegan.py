@@ -21,9 +21,9 @@ EvalHandle = namedtuple("EvalHandle", ["encoder", "generator", "target", "source
 SummaryHandle = namedtuple("SummaryHandle", ["d_merged", "g_merged"])
 
 
-class UNet(object):
-    def __init__(self, experiment_dir=None, experiment_id=0, batch_size=16, input_width=256, output_width=256,
-                 generator_dim=64, discriminator_dim=64, L1_penalty=100, Lconst_penalty=15, Ltv_penalty=0.0,
+class GEGAN(object):
+    def __init__(self, experiment_dir=None, experiment_id=0, batch_size=16, input_width=64, output_width=64,
+                 generator_dim=128, discriminator_dim=128, L1_penalty=100, Lconst_penalty=15, Ltv_penalty=0.0,
                  Lcategory_penalty=1.0, embedding_num=40, embedding_dim=128, input_filters=3, output_filters=3):
         self.experiment_dir = experiment_dir
         self.experiment_id = experiment_id
@@ -44,10 +44,10 @@ class UNet(object):
         self.sess = None
         # experiment_dir is needed for training
         if experiment_dir:
-            self.data_dir = os.path.join(self.experiment_dir, "data")
+            self.data_dir       = os.path.join(self.experiment_dir, "data")
             self.checkpoint_dir = os.path.join(self.experiment_dir, "checkpoint")
-            self.sample_dir = os.path.join(self.experiment_dir, "sample")
-            self.log_dir = os.path.join(self.experiment_dir, "logs")
+            self.sample_dir     = os.path.join(self.experiment_dir, "sample")
+            self.log_dir        = os.path.join(self.experiment_dir, "logs")
 
             if not os.path.exists(self.checkpoint_dir):
                 os.makedirs(self.checkpoint_dir)
@@ -80,10 +80,10 @@ class UNet(object):
             e4 = encode_layer(e3, self.generator_dim * 8, 4)
             e5 = encode_layer(e4, self.generator_dim * 8, 5)
             e6 = encode_layer(e5, self.generator_dim * 8, 6)
-            e7 = encode_layer(e6, self.generator_dim * 8, 7)
-            e8 = encode_layer(e7, self.generator_dim * 8, 8)
+#             e7 = encode_layer(e6, self.generator_dim * 8, 7)
+#             e8 = encode_layer(e7, self.generator_dim * 8, 8)
 
-            return e8, encode_layers
+            return e6, encode_layers
 
     def decoder(self, encoded, encoding_layers, ids, inst_norm, is_training, reuse=False):
         with tf.variable_scope("generator"):
@@ -91,13 +91,15 @@ class UNet(object):
                 tf.get_variable_scope().reuse_variables()
 
             s = self.output_width
-            s2, s4, s8, s16, s32, s64, s128 = int(s / 2), int(s / 4), int(s / 8), int(s / 16), int(s / 32), int(
-                s / 64), int(s / 128)
+#             s2, s4, s8, s16, s32, s64, s128 = int(s / 2), int(s / 4), int(s / 8), int(s / 16), int(s / 32), int(
+#                 s / 64), int(s / 128)
+            s2, s4, s8, s16, s32 = int(s / 2), int(s / 4), int(s / 8), int(s / 16), int(s / 32)
+
 
             def decode_layer(x, output_width, output_filters, layer, enc_layer, dropout=False, do_concat=True):
                 dec = deconv2d(tf.nn.relu(x), [self.batch_size, output_width,
                                                output_width, output_filters], scope="g_d%d_deconv" % layer)
-                if layer != 8:
+                if layer != 6:
                     # IMPORTANT: normalization for last layer
                     # Very important, otherwise GAN is unstable
                     # Trying conditional instance normalization to
@@ -113,26 +115,33 @@ class UNet(object):
                     dec = tf.concat([dec, enc_layer], 3)
                 return dec
 
-            d1 = decode_layer(encoded, s128, self.generator_dim * 8, layer=1, enc_layer=encoding_layers["e7"],
-                              dropout=True)
-            d2 = decode_layer(d1, s64, self.generator_dim * 8, layer=2, enc_layer=encoding_layers["e6"], dropout=True)
-            d3 = decode_layer(d2, s32, self.generator_dim * 8, layer=3, enc_layer=encoding_layers["e5"], dropout=True)
-            d4 = decode_layer(d3, s16, self.generator_dim * 8, layer=4, enc_layer=encoding_layers["e4"])
-            d5 = decode_layer(d4, s8, self.generator_dim * 4, layer=5, enc_layer=encoding_layers["e3"])
-            d6 = decode_layer(d5, s4, self.generator_dim * 2, layer=6, enc_layer=encoding_layers["e2"])
-            d7 = decode_layer(d6, s2, self.generator_dim, layer=7, enc_layer=encoding_layers["e1"])
-            d8 = decode_layer(d7, s, self.output_filters, layer=8, enc_layer=None, do_concat=False)
+#             d1 = decode_layer(encoded, s128, self.generator_dim * 8, layer=1, enc_layer=encoding_layers["e7"],
+#                               dropout=True)
+#             d2 = decode_layer(d1, s64, self.generator_dim * 8, layer=2, enc_layer=encoding_layers["e6"], dropout=True)
+#             d3 = decode_layer(d2, s32, self.generator_dim * 8, layer=3, enc_layer=encoding_layers["e5"], dropout=True)
+#             d4 = decode_layer(d3, s16, self.generator_dim * 8, layer=4, enc_layer=encoding_layers["e4"])
+#             d5 = decode_layer(d4, s8, self.generator_dim * 4, layer=5, enc_layer=encoding_layers["e3"])
+#             d6 = decode_layer(d5, s4, self.generator_dim * 2, layer=6, enc_layer=encoding_layers["e2"])
+#             d7 = decode_layer(d6, s2, self.generator_dim, layer=7, enc_layer=encoding_layers["e1"])
+#             d8 = decode_layer(d7, s, self.output_filters, layer=8, enc_layer=None, do_concat=False)
 
-            output = tf.nn.tanh(d8)  # scale to (-1, 1)
+            d1 = decode_layer(encoded, s32, self.generator_dim * 8, layer=1, enc_layer=encoding_layers["e5"], dropout=True)
+            d2 = decode_layer(d1,      s16, self.generator_dim * 8, layer=2, enc_layer=encoding_layers["e4"])
+            d3 = decode_layer(d2,      s8,  self.generator_dim * 4, layer=3, enc_layer=encoding_layers["e3"])
+            d4 = decode_layer(d3,      s4,  self.generator_dim * 2, layer=4, enc_layer=encoding_layers["e2"])
+            d5 = decode_layer(d4,      s2,  self.generator_dim * 1, layer=5, enc_layer=encoding_layers["e1"])
+            d6 = decode_layer(d5,      s,   self.output_filters,    layer=6, enc_layer=None, do_concat=False)
+
+            output = tf.nn.tanh(d6)  # scale to (-1, 1)
             return output
 
     def generator(self, images, embeddings, embedding_ids, inst_norm, is_training, reuse=False):
-        e8, enc_layers = self.encoder(images, is_training=is_training, reuse=reuse)
+        e6, enc_layers = self.encoder(images, is_training=is_training, reuse=reuse)
         local_embeddings = tf.nn.embedding_lookup(embeddings, ids=embedding_ids)
         local_embeddings = tf.reshape(local_embeddings, [self.batch_size, 1, 1, self.embedding_dim])
-        embedded = tf.concat([e8, local_embeddings], 3)
+        embedded = tf.concat([e6, local_embeddings], 3)
         output = self.decoder(embedded, enc_layers, embedding_ids, inst_norm, is_training=is_training, reuse=reuse)
-        return output, e8
+        return output, e6
 
     def discriminator(self, image, is_training, reuse=False):
         with tf.variable_scope("discriminator"):
@@ -155,14 +164,14 @@ class UNet(object):
     def build_model(self, is_training=True, inst_norm=False, no_target_source=False):
         real_data = tf.placeholder(tf.float32,
                                    [self.batch_size, self.input_width, self.input_width,
-                                    self.input_filters + self.output_filters],
+                                    self.input_filters],
                                    name='real_A_and_B_images')
         embedding_ids = tf.placeholder(tf.int64, shape=None, name="embedding_ids")
         no_target_data = tf.placeholder(tf.float32,
                                         [self.batch_size, self.input_width, self.input_width,
                                          self.input_filters + self.output_filters],
                                         name='no_target_A_and_B_images')
-        no_target_ids = tf.placeholder(tf.int64, shape=None, name="no_target_embedding_ids")
+        # no_target_ids = tf.placeholder(tf.int64, shape=None, name="no_target_embedding_ids")
 
         # target images
         real_B = real_data[:, :, :, :self.input_filters]
@@ -214,37 +223,37 @@ class UNet(object):
         d_loss = d_loss_real + d_loss_fake + category_loss / 2.0
         g_loss = cheat_loss + l1_loss + self.Lcategory_penalty * fake_category_loss + const_loss + tv_loss
 
-        if no_target_source:
-            # no_target source are examples that don't have the corresponding target images
-            # however, except L1 loss, we can compute category loss, binary loss and constant losses with those examples
-            # it is useful when discriminator get saturated and d_loss drops to near zero
-            # those data could be used as additional source of losses to break the saturation
-            no_target_A = no_target_data[:, :, :, self.input_filters:self.input_filters + self.output_filters]
-            no_target_B, encoded_no_target_A = self.generator(no_target_A, embedding, no_target_ids,
-                                                              is_training=is_training,
-                                                              inst_norm=inst_norm, reuse=True)
-            no_target_labels = tf.reshape(tf.one_hot(indices=no_target_ids, depth=self.embedding_num),
-                                          shape=[self.batch_size, self.embedding_num])
-            no_target_AB = tf.concat([no_target_A, no_target_B], 3)
-            no_target_D, no_target_D_logits, no_target_category_logits = self.discriminator(no_target_AB,
-                                                                                            is_training=is_training,
-                                                                                            reuse=True)
-            encoded_no_target_B = self.encoder(no_target_B, is_training, reuse=True)[0]
-            no_target_const_loss = tf.reduce_mean(
-                tf.square(encoded_no_target_A - encoded_no_target_B)) * self.Lconst_penalty
-            no_target_category_loss = tf.reduce_mean(
-                tf.nn.sigmoid_cross_entropy_with_logits(logits=no_target_category_logits,
-                                                        labels=no_target_labels)) * self.Lcategory_penalty
-
-            d_loss_no_target = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=no_target_D_logits,
-                                                                                      labels=tf.zeros_like(
-                                                                                          no_target_D)))
-            cheat_loss += tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=no_target_D_logits,
-                                                                                 labels=tf.ones_like(no_target_D)))
-            d_loss = d_loss_real + d_loss_fake + d_loss_no_target + (category_loss + no_target_category_loss) / 3.0
-            g_loss = cheat_loss / 2.0 + l1_loss + \
-                     (self.Lcategory_penalty * fake_category_loss + no_target_category_loss) / 2.0 + \
-                     (const_loss + no_target_const_loss) / 2.0 + tv_loss
+#         if no_target_source:
+#             # no_target source are examples that don't have the corresponding target images
+#             # however, except L1 loss, we can compute category loss, binary loss and constant losses with those examples
+#             # it is useful when discriminator get saturated and d_loss drops to near zero
+#             # those data could be used as additional source of losses to break the saturation
+#             no_target_A = no_target_data[:, :, :, self.input_filters:self.input_filters + self.output_filters]
+#             no_target_B, encoded_no_target_A = self.generator(no_target_A, embedding, no_target_ids,
+#                                                               is_training=is_training,
+#                                                               inst_norm=inst_norm, reuse=True)
+#             no_target_labels = tf.reshape(tf.one_hot(indices=no_target_ids, depth=self.embedding_num),
+#                                           shape=[self.batch_size, self.embedding_num])
+#             no_target_AB = tf.concat([no_target_A, no_target_B], 3)
+#             no_target_D, no_target_D_logits, no_target_category_logits = self.discriminator(no_target_AB,
+#                                                                                             is_training=is_training,
+#                                                                                             reuse=True)
+#             encoded_no_target_B = self.encoder(no_target_B, is_training, reuse=True)[0]
+#             no_target_const_loss = tf.reduce_mean(
+#                 tf.square(encoded_no_target_A - encoded_no_target_B)) * self.Lconst_penalty
+#             no_target_category_loss = tf.reduce_mean(
+#                 tf.nn.sigmoid_cross_entropy_with_logits(logits=no_target_category_logits,
+#                                                         labels=no_target_labels)) * self.Lcategory_penalty
+# 
+#             d_loss_no_target = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=no_target_D_logits,
+#                                                                                       labels=tf.zeros_like(
+#                                                                                           no_target_D)))
+#             cheat_loss += tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=no_target_D_logits,
+#                                                                                  labels=tf.ones_like(no_target_D)))
+#             d_loss = d_loss_real + d_loss_fake + d_loss_no_target + (category_loss + no_target_category_loss) / 3.0
+#             g_loss = cheat_loss / 2.0 + l1_loss + \
+#                      (self.Lcategory_penalty * fake_category_loss + no_target_category_loss) / 2.0 + \
+#                      (const_loss + no_target_const_loss) / 2.0 + tv_loss
 
         d_loss_real_summary = tf.summary.scalar("d_loss_real", d_loss_real)
         d_loss_fake_summary = tf.summary.scalar("d_loss_fake", d_loss_fake)
@@ -316,10 +325,10 @@ class UNet(object):
         return generate_vars
 
     def retrieve_handles(self):
-        input_handle = getattr(self, "input_handle")
-        loss_handle = getattr(self, "loss_handle")
-        eval_handle = getattr(self, "eval_handle")
-        summary_handle = getattr(self, "summary_handle")
+        input_handle    = getattr(self, "input_handle")
+        loss_handle     = getattr(self, "loss_handle")
+        eval_handle     = getattr(self, "eval_handle")
+        summary_handle  = getattr(self, "summary_handle")
 
         return input_handle, loss_handle, eval_handle, summary_handle
 
@@ -329,7 +338,7 @@ class UNet(object):
         return model_id, model_dir
 
     def checkpoint(self, saver, step):
-        model_name = "unet.model"
+        model_name = "gegan.model"
         model_id, model_dir = self.get_model_id_and_dir()
 
         if not os.path.exists(model_dir):
@@ -501,14 +510,14 @@ class UNet(object):
         if not self.sess:
             raise Exception("no session registered")
 
-        learning_rate = tf.placeholder(tf.float32, name="learning_rate")
-        d_optimizer = tf.train.AdamOptimizer(learning_rate, beta1=0.5).minimize(loss_handle.d_loss, var_list=d_vars)
-        g_optimizer = tf.train.AdamOptimizer(learning_rate, beta1=0.5).minimize(loss_handle.g_loss, var_list=g_vars)
+        learning_rate   = tf.placeholder(tf.float32, name="learning_rate")
+        d_optimizer     = tf.train.AdamOptimizer(learning_rate, beta1=0.5).minimize(loss_handle.d_loss, var_list=d_vars)
+        g_optimizer     = tf.train.AdamOptimizer(learning_rate, beta1=0.5).minimize(loss_handle.g_loss, var_list=g_vars)
         tf.global_variables_initializer().run()
-        real_data = input_handle.real_data
-        embedding_ids = input_handle.embedding_ids
-        no_target_data = input_handle.no_target_data
-        no_target_ids = input_handle.no_target_ids
+        real_data       = input_handle.real_data
+        embedding_ids   = input_handle.embedding_ids
+        no_target_data  = input_handle.no_target_data
+        no_target_ids   = input_handle.no_target_ids
 
         # filter by one type of labels
         data_provider = TrainDataProvider(self.data_dir, filter_by=fine_tune)
