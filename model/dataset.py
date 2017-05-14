@@ -44,7 +44,7 @@ def get_image_label_list():
     gl_path    = "/home/jcm/thesis/celebA/1/"
 
     ng_list    = [os.path.join(ng_path, filename) for filename in os.listdir(ng_path)]
-    gl_list    = [os.path.join(gl_path, filename) for filename in os.listdir(ng_path)]
+    gl_list    = [os.path.join(gl_path, filename) for filename in os.listdir(gl_path)]
 
     image_list   = ng_list + gl_list
     label_list = [0] * len(ng_list) + [1] * len(gl_list)
