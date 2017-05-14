@@ -13,18 +13,18 @@ def get_train_dataloader(batch_size):
     images = tf.convert_to_tensor(image_list, dtype=tf.string)
     labels = tf.convert_to_tensor(label_list, dtype=tf.int32)
 
-    input_queue = tf.train.slice_input_producer([images, labels], shuffle=False)
+    input_queue = tf.train.slice_input_producer([images, labels], shuffle=True)
     image, label = read_image_label_from_disk(input_queue)
 
     min_after_dequeue = 1000
     capacity = min_after_dequeue + 3 * batch_size
 
     batch = tf.train.shuffle_batch([image, label],
-                            batch_size=batch_size,
-                            num_threads=4,
-                            capacity=capacity,
-                            min_after_dequeue=min_after_dequeue,
-                            name="TrainData")
+                                   batch_size=batch_size,
+                                   num_threads=4,
+                                   capacity=capacity,
+                                   min_after_dequeue=min_after_dequeue,
+                                   name="TrainData")
 
     return batch
 
@@ -46,10 +46,10 @@ def get_image_label_list():
     ng_list    = [os.path.join(ng_path, filename) for filename in os.listdir(ng_path)]
     gl_list    = [os.path.join(gl_path, filename) for filename in os.listdir(ng_path)]
 
-    img_list   = ng_list + gl_list
+    image_list   = ng_list + gl_list
     label_list = [0] * len(ng_list) + [1] * len(gl_list)
 
-    return img_list, label_list
+    return image_list, label_list
 
 # class PickledImageProvider(object):
 #     def __init__(self, obj_path):
