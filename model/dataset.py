@@ -11,7 +11,7 @@ import os
 def get_train_dataloader(batch_size):
     image_list, label_list = get_image_label_list()
     images = tf.convert_to_tensor(image_list, dtype=tf.string)
-    labels = tf.convert_to_tensor(label_list, dtype=tf.int32)
+    labels = tf.convert_to_tensor(label_list, dtype=tf.int64)
 
     input_queue = tf.train.slice_input_producer([images, labels], shuffle=True)
     image, label = read_image_label_from_disk(input_queue)
