@@ -5,7 +5,7 @@ from __future__ import absolute_import
 import tensorflow as tf
 import argparse
 
-from model.unet import UNet
+from model.gegan import GEGAN
 
 parser = argparse.ArgumentParser(description='Train')
 parser.add_argument('--experiment_dir', dest='experiment_dir', required=True,
@@ -37,8 +37,6 @@ parser.add_argument('--sample_steps', dest='sample_steps', type=int, default=10,
                     help='number of batches in between two samples are drawn from validation set')
 parser.add_argument('--checkpoint_steps', dest='checkpoint_steps', type=int, default=500,
                     help='number of batches in between two checkpoints')
-parser.add_argument('--flip_labels', dest='flip_labels', type=int, default=None,
-                    help='whether flip training data labels or not, in fine tuning')
 args = parser.parse_args()
 
 
@@ -47,7 +45,7 @@ def main(_):
     config.gpu_options.allow_growth = True
 
     with tf.Session(config=config) as sess:
-        model = UNet(args.experiment_dir, batch_size=args.batch_size, experiment_id=args.experiment_id,
+        model = GEGAN(args.experiment_dir, batch_size=args.batch_size, experiment_id=args.experiment_id,
                      input_width=args.image_size, output_width=args.image_size, embedding_num=args.embedding_num,
                      embedding_dim=args.embedding_dim, L1_penalty=args.L1_penalty, Lconst_penalty=args.Lconst_penalty,
                      Ltv_penalty=args.Ltv_penalty, Lcategory_penalty=args.Lcategory_penalty)

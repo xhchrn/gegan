@@ -487,9 +487,9 @@ class GEGAN(object):
             self.sess.run(op)
 
     def train(self, lr=0.0002, epoch=100, schedule=10, resume=True, flip_labels=False,
-              freeze_encoder=False, fine_tune=None, sample_steps=50, checkpoint_steps=500):
+              freeze_encoder=False, fine_tune=None, sample_steps=50, checkpoint_steps=1000):
         g_vars, d_vars = self.retrieve_trainable_vars(freeze_encoder=freeze_encoder)
-        input_handle, loss_handle, _, summary_handle = self.retrieve_handles()
+        input_handle, loss_handle, eval_handle, summary_handle = self.retrieve_handles()
 
         if not self.sess:
             raise Exception("no session registered")
@@ -509,10 +509,9 @@ class GEGAN(object):
             _, model_dir = self.get_model_id_and_dir()
             self.restore_model(saver, model_dir)
 
-        max_step = 500000
-        current_lr = 0.0001
-        counter = 0
-        start_time = time.time()
+        max_step    = 500000
+        current_lr  = 0.0001
+        log_step    = 50
 
         for t in trange(max_step):
             batch_images, labels = self.train_dataloader.eval(session=self.sess)
@@ -533,3 +532,35 @@ class GEGAN(object):
                                                 embedding_ids: labels,
                                                 learning_rate: current_lr
                                             })
+
+            # magic move to train G again
+            # according to https://github.com/carpedm20/DCGAN-tensorflow
+            # collect all the losses along the way
+            _, batch_g_loss, category_loss, cheat_loss, \
+            const_loss, l1_loss, vgg_loss, g_summary = self.sess.run([g_optimizer,
+                                                                     loss_handle.g_loss,
+                                                                     loss_handle.category_loss,
+                                                                     loss_handle.cheat_loss,
+                                                                     loss_handle.const_loss,
+                                                                     loss_handle.l1_loss,
+                                                                     loss_handle.vgg_loss,
+                                                                     summary_handle.g_merged],
+                                                                    feed_dict={
+                                                                        real_data: batch_images,
+                                                                        embedding_ids: labels,
+                                                                        learning_rate: current_lr
+                                                                    })
+
+            if t % log_step == 0:
+                print("[{}]/[{}] D_loss: {} G_loss: {}".format(t, max_step, batch_d_loss, batch_g_loss))
+
+            if t % (log_step * 10) == 0:
+                fake_s, fake_c = self.sess.run([eval_handle.fake_s, eval_handle.fake_c],
+                                               feed_dict={
+                                                   real_data: batch_images,
+                                                   embedding_ids: labels
+                                               })
+
+            if t % checkpoint_steps == 0:
+                print("Checkpoint: save checkpoint step: {}".format(t))
+                self.checkpoint(saver, t)
