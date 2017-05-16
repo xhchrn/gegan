@@ -36,7 +36,7 @@ SummaryHandle = namedtuple("SummaryHandle", ["d_merged", "g_merged"])
 
 class GEGAN(object):
     def __init__(self, experiment_dir=None, experiment_id=0, batch_size=16, input_width=64, output_width=64,
-                 generator_dim=64, discriminator_dim=64, L1_penalty=100, Lconst_penalty=15, Ltv_penalty=0.0,
+                 generator_dim=64, discriminator_dim=64, L1_penalty=100, Lconst_penalty=15, Lvgg_penalty=0.1,
                  Lcategory_penalty=1.0, embedding_num=2, embedding_dim=64, input_filters=3, output_filters=3):
         self.experiment_dir     = experiment_dir
         self.experiment_id      = experiment_id
@@ -47,7 +47,7 @@ class GEGAN(object):
         self.discriminator_dim  = discriminator_dim
         self.L1_penalty         = L1_penalty
         self.Lconst_penalty     = Lconst_penalty
-        self.Ltv_penalty        = Ltv_penalty
+        self.Lvgg_penalty       = Lvgg_penalty
         self.Lcategory_penalty  = Lcategory_penalty
         self.embedding_num      = embedding_num
         self.embedding_dim      = embedding_dim
@@ -217,7 +217,7 @@ class GEGAN(object):
         # vgg loss between real and fake_c
         denorm_real_data = tf.clip_by_value((real_data + 1) * 127.5, 0.0, 255.0)
         denorm_fake_c    = tf.clip_by_value((fake_c    + 1) * 127.5, 0.0, 255.0)
-        vgg_loss = self.vgg.vgg_loss(denorm_fake_c, denorm_real_data)
+        vgg_loss = self.vgg.vgg_loss(denorm_fake_c, denorm_real_data) * self.Lvgg_penalty
 
         # maximize the chance generator fool the discriminator
         cheat_loss_s = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_s_D_logits,
@@ -557,7 +557,7 @@ class GEGAN(object):
                                                                     })
 
             if t % log_step == 0:
-                print("[{}]/[{}] D_loss: {} G_loss: {}".format(t, max_step, batch_d_loss, batch_g_loss))
+                print("[{}]/[{}] D_loss: {} G_loss: {} vgg_loss: {}".format(t, max_step, batch_d_loss, batch_g_loss, vgg_loss))
                 fake_s, fake_c = self.sess.run([eval_handle.fake_s, eval_handle.fake_c],
                                                feed_dict={
                                                    real_data: batch_images,
