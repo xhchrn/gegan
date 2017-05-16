@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 import tensorflow as tf
 import numpy as np
+import os
 from scipy.io import loadmat
 
 class VGG_Model(object):
     def __init__(self):
-        self.param_path = "vgg-face.mat"
+        self.param_path = os.path.join(os.getcwd(), "model", "vgg-face.mat")
         self.build_model()
 
     def build_model(self):
