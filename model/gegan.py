@@ -16,10 +16,21 @@ from .vgg import VGG_Model
 
 # Auxiliary wrapper classes
 # Used to save handles(important nodes in computation graph) for later evaluation
-LossHandle = namedtuple("LossHandle", ["d_loss", "g_loss", "const_loss", "l1_loss",
-                                       "category_loss", "cheat_loss", "vgg_loss"])
-InputHandle = namedtuple("InputHandle", ["real_data", "embedding_ids"])
-EvalHandle = namedtuple("EvalHandle", ["encoder", "generator", "target", "source", "embedding"])
+LossHandle = namedtuple("LossHandle",
+                        ["d_loss",
+                         "g_loss",
+                         "const_loss",
+                         "l1_loss",
+                         "category_loss",
+                         "cheat_loss",
+                         "vgg_loss"])
+EvalHandle = namedtuple("EvalHandle",
+                        ["encoder",
+                         "fake_s",
+                         "fake_c",
+                         "source",
+                         "embedding"])
+InputHandle   = namedtuple("InputHandle",   ["real_data", "embedding_ids"])
 SummaryHandle = namedtuple("SummaryHandle", ["d_merged", "g_merged"])
 
 
@@ -249,25 +260,25 @@ class GEGAN(object):
                                              g_loss_summary])
 
         # expose useful nodes in the graph as handles globally
-        input_handle    = InputHandle(real_data=real_data,
-                                      embedding_ids=embedding_ids)
+        input_handle    = InputHandle(real_data     = real_data,
+                                      embedding_ids = embedding_ids)
 
-        loss_handle     = LossHandle(d_loss=d_loss,
-                                     g_loss=g_loss,
-                                     l1_loss=l1_loss,
-                                     vgg_loss=tv_loss,
-                                     const_loss=const_loss,
-                                     category_loss=category_loss,
-                                     cheat_loss=cheat_loss)
+        loss_handle     = LossHandle(d_loss         = d_loss,
+                                     g_loss         = g_loss,
+                                     l1_loss        = l1_loss,
+                                     vgg_loss       = tv_loss,
+                                     const_loss     = const_loss,
+                                     category_loss  = category_loss,
+                                     cheat_loss     = cheat_loss)
 
-        eval_handle     = EvalHandle(encoder=encoded_real_A,
-                                     generator=fake_B,
-                                     target=real_B,
-                                     source=real_A,
-                                     embedding=embedding)
+        eval_handle     = EvalHandle(encoder    = encoded_real,
+                                     fake_s     = fake_s,
+                                     fake_c     = fake_c,
+                                     source     = real_data,
+                                     embedding  = embedding)
 
-        summary_handle  = SummaryHandle(d_merged=d_merged_summary,
-                                        g_merged=g_merged_summary)
+        summary_handle  = SummaryHandle(d_merged = d_merged_summary,
+                                        g_merged = g_merged_summary)
 
         # those operations will be shared, so we need
         # to make them visible globally
@@ -489,13 +500,6 @@ class GEGAN(object):
         tf.global_variables_initializer().run()
         real_data       = input_handle.real_data
         embedding_ids   = input_handle.embedding_ids
-#         no_target_data  = input_handle.no_target_data
-#         no_target_ids   = input_handle.no_target_ids
-# 
-#         # filter by one type of labels
-#         data_provider = TrainDataProvider(self.data_dir, filter_by=fine_tune)
-#         total_batches = data_provider.compute_total_batch_num(self.batch_size)
-#         val_batch_iter = data_provider.get_val_iter(self.batch_size)
 
         tf.train.start_queue_runners(sess=self.sess)
         saver = tf.train.Saver(max_to_keep=3)
@@ -506,7 +510,6 @@ class GEGAN(object):
             self.restore_model(saver, model_dir)
 
         max_step = 500000
-#         current_lr = lr
         current_lr = 0.0001
         counter = 0
         start_time = time.time()
@@ -514,15 +517,9 @@ class GEGAN(object):
         for t in trange(max_step):
             batch_images, labels = self.train_dataloader.eval(session=self.sess)
 
-#             if (ei + 1) % schedule == 0:
-#                 update_lr = current_lr / 2.0
-#                 # minimum learning rate guarantee
-#                 update_lr = max(update_lr, 0.0002)
-#                 print("decay learning rate from %.5f to %.5f" % (current_lr, update_lr))
-#                 current_lr = update_lr
-
             # optimize D
-            _, batch_d_loss, d_summary = self.sess.run([d_optimizer, loss_handle.d_loss,
+            _, batch_d_loss, d_summary = self.sess.run([d_optimizer,
+                                                        loss_handle.d_loss,
                                                         summary_handle.d_merged],
                                                        feed_dict={
                                                            real_data: batch_images,
@@ -536,71 +533,3 @@ class GEGAN(object):
                                                 embedding_ids: labels,
                                                 learning_rate: current_lr
                                             })
-
-            # magic move to train G again
-            # according to https://github.com/carpedm20/DCGAN-tensorflow
-            # collect all the losses along the way
-            
-
-#             for bid, batch in enumerate(train_batch_iter):
-#                 counter += 1
-#                 labels, batch_images = batch
-#                 shuffled_ids = labels[:]
-#                 if flip_labels:
-#                     np.random.shuffle(shuffled_ids)
-#                 # Optimize D
-#                 _, batch_d_loss, d_summary = self.sess.run([d_optimizer, loss_handle.d_loss,
-#                                                             summary_handle.d_merged],
-#                                                            feed_dict={
-#                                                                real_data: batch_images,
-#                                                                embedding_ids: labels,
-#                                                                learning_rate: current_lr,
-#                                                                no_target_data: batch_images,
-#                                                                no_target_ids: shuffled_ids
-#                                                            })
-#                 # Optimize G
-#                 _, batch_g_loss = self.sess.run([g_optimizer, loss_handle.g_loss],
-#                                                 feed_dict={
-#                                                     real_data: batch_images,
-#                                                     embedding_ids: labels,
-#                                                     learning_rate: current_lr,
-#                                                     no_target_data: batch_images,
-#                                                     no_target_ids: shuffled_ids
-#                                                 })
-#                 # magic move to Optimize G again
-#                 # according to https://github.com/carpedm20/DCGAN-tensorflow
-#                 # collect all the losses along the way
-#                 _, batch_g_loss, category_loss, cheat_loss, \
-#                 const_loss, l1_loss, tv_loss, g_summary = self.sess.run([g_optimizer,
-#                                                                          loss_handle.g_loss,
-#                                                                          loss_handle.category_loss,
-#                                                                          loss_handle.cheat_loss,
-#                                                                          loss_handle.const_loss,
-#                                                                          loss_handle.l1_loss,
-#                                                                          loss_handle.tv_loss,
-#                                                                          summary_handle.g_merged],
-#                                                                         feed_dict={
-#                                                                             real_data: batch_images,
-#                                                                             embedding_ids: labels,
-#                                                                             learning_rate: current_lr,
-#                                                                             no_target_data: batch_images,
-#                                                                             no_target_ids: shuffled_ids
-#                                                                         })
-#                 passed = time.time() - start_time
-#                 log_format = "Epoch: [%2d], [%4d/%4d] time: %4.4f, d_loss: %.5f, g_loss: %.5f, " + \
-#                              "category_loss: %.5f, cheat_loss: %.5f, const_loss: %.5f, l1_loss: %.5f, tv_loss: %.5f"
-#                 print(log_format % (ei, bid, total_batches, passed, batch_d_loss, batch_g_loss,
-#                                     category_loss, cheat_loss, const_loss, l1_loss, tv_loss))
-#                 summary_writer.add_summary(d_summary, counter)
-#                 summary_writer.add_summary(g_summary, counter)
-# 
-#                 if counter % sample_steps == 0:
-#                     # sample the current model states with val data
-#                     self.validate_model(val_batch_iter, ei, counter)
-# 
-#                 if counter % checkpoint_steps == 0:
-#                     print("Checkpoint: save checkpoint step %d" % counter)
-#                     self.checkpoint(saver, counter)
-#         # save the last checkpoint
-#         print("Checkpoint: last checkpoint step %d" % counter)
-#         self.checkpoint(saver, counter)
