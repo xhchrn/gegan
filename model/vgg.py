@@ -13,8 +13,8 @@ class VGG_Model(object):
         self.class_names   = self.classes[0][0]['description'][0][0]
         self.normalization = self.meta['normalization']
         self.layers        = self.data['layers']
-        self.average_image = np.squeeze(normalization[0][0]['averageImage'][0][0][0][0])
-        self.image_size    = np.squeeze(normalization[0][0]['imageSize'][0][0])
+        self.average_image = np.squeeze(self.normalization[0][0]['averageImage'][0][0][0][0])
+        self.image_size    = np.squeeze(self.normalization[0][0]['imageSize'][0][0])
 
         self.used = False
 
@@ -30,15 +30,15 @@ class VGG_Model(object):
             current = input_maps
             network = {}
             for layer in self.layers[0]:
-                name = self.layer[0]['name'][0][0]
-                layer_type = self.layer[0]['type'][0][0]
+                name = layer[0]['name'][0][0]
+                layer_type = layer[0]['type'][0][0]
                 if layer_type == 'conv':
                     if name[:2] == 'fc':
                         padding = 'VALID'
                     else:
                         padding = 'SAME'
-                    stride = self.layer[0]['stride'][0][0]
-                    kernel, bias = self.layer[0]['weights'][0][0]
+                    stride = layer[0]['stride'][0][0]
+                    kernel, bias = layer[0]['weights'][0][0]
                     bias   = np.squeeze(bias).reshape(-1)
                     kernel = tf.constant(kernel)
                     bias   = tf.constant(bias)
@@ -47,26 +47,26 @@ class VGG_Model(object):
                     conv   = tf.nn.conv2d(current, kernel,
                                         strides=(1, stride[0], stride[0], 1), padding=padding)
                     current = tf.nn.bias_add(conv, bias)
-                    print(name, 'stride:', stride, 'kernel size:', tf.shape(kernel))
+                    # print(name, 'stride:', stride, 'kernel size:', tf.shape(kernel))
                 elif layer_type == 'relu':
                     current = tf.nn.relu(current)
-                    print(name)
+                    # print(name)
                 elif layer_type == 'pool':
-                    stride = self.layer[0]['stride'][0][0]
-                    pool = self.layer[0]['pool'][0][0]
+                    stride = layer[0]['stride'][0][0]
+                    pool = layer[0]['pool'][0][0]
                     current = tf.nn.max_pool(current, ksize=(1, pool[0], pool[1], 1),
                                              strides=(1, stride[0], stride[0], 1), padding='SAME')
-                    print(name, 'stride:', stride)
+                    # print(name, 'stride:', stride)
                 elif layer_type == 'softmax':
-                    current = tf.nn.softmax(tf.reshape(current, [-1, len(class_names)]))
-                    print(name)
+                    current = tf.nn.softmax(tf.reshape(current, [-1, len(self.class_names)]))
+                    # print(name)
 
                 network[name] = current
 
         return network["conv4_3"], network["conv5_3"]
 
     def vgg_loss(self, a, b):
-        if self.used == False
+        if self.used == False:
             conv4_a, conv5_a = self.vgg(a, reuse=False)
             self.used = True
         else:

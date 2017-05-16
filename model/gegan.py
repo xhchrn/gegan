@@ -11,7 +11,7 @@ from tqdm import trange
 from collections import namedtuple
 from .ops import conv2d, deconv2d, lrelu, fc, batch_norm, init_embedding, conditional_instance_norm
 from .dataset import get_train_dataloader
-from .utils import scale_back, merge, save_concat_images
+from .utils import normalize_image, denormalize_image, save_image
 from .vgg import VGG_Model
 
 # Auxiliary wrapper classes
@@ -36,8 +36,8 @@ SummaryHandle = namedtuple("SummaryHandle", ["d_merged", "g_merged"])
 
 class GEGAN(object):
     def __init__(self, experiment_dir=None, experiment_id=0, batch_size=16, input_width=64, output_width=64,
-                 generator_dim=128, discriminator_dim=128, L1_penalty=100, Lconst_penalty=15, Ltv_penalty=0.0,
-                 Lcategory_penalty=1.0, embedding_num=40, embedding_dim=128, input_filters=3, output_filters=3):
+                 generator_dim=64, discriminator_dim=64, L1_penalty=100, Lconst_penalty=15, Ltv_penalty=0.0,
+                 Lcategory_penalty=1.0, embedding_num=2, embedding_dim=64, input_filters=3, output_filters=3):
         self.experiment_dir     = experiment_dir
         self.experiment_id      = experiment_id
         self.batch_size         = batch_size
@@ -92,7 +92,7 @@ class GEGAN(object):
             encode_layers["e1"] = e1
             e2 = encode_layer(e1, self.generator_dim * 2, 2)
             e3 = encode_layer(e2, self.generator_dim * 4, 3)
-            e4 = encode_layer(e3, self.generator_dim * 8, 4)
+            e4 = encode_layer(e3, self.generator_dim * 4, 4)
             e5 = encode_layer(e4, self.generator_dim * 8, 5)
             e6 = encode_layer(e5, self.generator_dim * 8, 6)
 
@@ -127,7 +127,7 @@ class GEGAN(object):
                 return dec
 
             d1 = decode_layer(encoded, s32, self.generator_dim * 8, layer=1, enc_layer=encoding_layers["e5"], dropout=True)
-            d2 = decode_layer(d1,      s16, self.generator_dim * 8, layer=2, enc_layer=encoding_layers["e4"])
+            d2 = decode_layer(d1,      s16, self.generator_dim * 4, layer=2, enc_layer=encoding_layers["e4"])
             d3 = decode_layer(d2,      s8,  self.generator_dim * 4, layer=3, enc_layer=encoding_layers["e3"])
             d4 = decode_layer(d3,      s4,  self.generator_dim * 2, layer=4, enc_layer=encoding_layers["e2"])
             d5 = decode_layer(d4,      s2,  self.generator_dim * 1, layer=5, enc_layer=encoding_layers["e1"])
@@ -170,9 +170,9 @@ class GEGAN(object):
         embedding_ids_c = tf.ones_like(embedding_ids) - embedding_ids # c means complementary
 
         embedding = init_embedding(self.embedding_num, self.embedding_dim)
-        fake_s, encoded_real = self.generator(real, embedding, embedding_ids,   is_training=is_training,
+        fake_s, encoded_real = self.generator(real_data, embedding, embedding_ids,   is_training=is_training,
                                                 inst_norm=inst_norm, reuse=False)
-        fake_c, _            = self.generator(real, embedding, embedding_ids_c, is_training=is_training,
+        fake_c, _            = self.generator(real_data, embedding, embedding_ids_c, is_training=is_training,
                                                 inst_norm=inst_norm, reuse=True)
 
         # Note it is not possible to set reuse flag back to False
@@ -212,8 +212,12 @@ class GEGAN(object):
                                                                                labels=tf.zeros_like(fake_c_D)))
 
         # L1 loss between real and generated images
-        l1_loss  = self.L1_penalty * tf.reduce_mean(tf.abs(fake_s - real))
-        vgg_loss = self.vgg.vgg_loss(real, fake_c)
+        l1_loss  = self.L1_penalty * tf.reduce_mean(tf.abs(fake_s - real_data))
+
+        # vgg loss between real and fake_c
+        denorm_real_data = tf.clip_by_value((real_data + 1) * 127.5, 0.0, 255.0)
+        denorm_fake_c    = tf.clip_by_value((fake_c    + 1) * 127.5, 0.0, 255.0)
+        vgg_loss = self.vgg.vgg_loss(denorm_fake_c, denorm_real_data)
 
         # maximize the chance generator fool the discriminator
         cheat_loss_s = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_s_D_logits,
@@ -266,7 +270,7 @@ class GEGAN(object):
         loss_handle     = LossHandle(d_loss         = d_loss,
                                      g_loss         = g_loss,
                                      l1_loss        = l1_loss,
-                                     vgg_loss       = tv_loss,
+                                     vgg_loss       = vgg_loss,
                                      const_loss     = const_loss,
                                      category_loss  = category_loss,
                                      cheat_loss     = cheat_loss)
@@ -509,12 +513,13 @@ class GEGAN(object):
             _, model_dir = self.get_model_id_and_dir()
             self.restore_model(saver, model_dir)
 
-        max_step    = 500000
+        max_step    = 100000
         current_lr  = 0.0001
         log_step    = 50
 
         for t in trange(max_step):
-            batch_images, labels = self.train_dataloader.eval(session=self.sess)
+            batch_images, labels = self.sess.run(self.train_dataloader)
+            batch_images = batch_images / 127.5 - 1.0
 
             # optimize D
             _, batch_d_loss, d_summary = self.sess.run([d_optimizer,
@@ -553,13 +558,17 @@ class GEGAN(object):
 
             if t % log_step == 0:
                 print("[{}]/[{}] D_loss: {} G_loss: {}".format(t, max_step, batch_d_loss, batch_g_loss))
-
-            if t % (log_step * 10) == 0:
                 fake_s, fake_c = self.sess.run([eval_handle.fake_s, eval_handle.fake_c],
                                                feed_dict={
                                                    real_data: batch_images,
                                                    embedding_ids: labels
                                                })
+                real   = denormalize_image(batch_images)
+                fake_s = denormalize_image(fake_s)
+                fake_c = denormalize_image(fake_c)
+                save_image(real,   os.path.join(self.experiment_dir, "sample", "{}_real.jpg".format(t)))
+                save_image(fake_s, os.path.join(self.experiment_dir, "sample", "{}_fake_s.jpg".format(t)))
+                save_image(fake_c, os.path.join(self.experiment_dir, "sample", "{}_fake_c.jpg".format(t)))
 
             if t % checkpoint_steps == 0:
                 print("Checkpoint: save checkpoint step: {}".format(t))
