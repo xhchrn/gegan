@@ -60,7 +60,7 @@ class VGG_Model(object):
                 network[name] = current
 
         setattr(self, "network", network)
-        setattr(self, "average_img", average_image)
+        setattr(self, "average_image", average_image)
         setattr(self, "conv4", network["conv4_3"])
         setattr(self, "conv5", network["conv5_3"])
 
